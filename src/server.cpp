@@ -42,13 +42,12 @@ void send(Client* c, const string& msg) {
 /* Dado un socket y un mensaje, envía dicho mensaje a traves del socket asociado al cliente */
 void send(int socket_id, const string& msg) {
     
-    if(send(socket_id, msg.data(), strlen(msg.data()), 0) < 0)
+    if(send(socket_id, msg.data(), msg.length(), 0) < 0)
         perror("enviando mensaje");
 
     return;
 
 }
-
 
 
 /* Funcion que ejecutan los threads */
@@ -58,9 +57,8 @@ void connection_handler(int socket_desc){
 
     char resp[MENSAJE_MAXIMO];
 
-    if(recv(socket_desc, resp, MENSAJE_MAXIMO, 0) < 0)
-        perror("recibiendo mensaje");
-
+    leer_de_socket(socket_desc, resp);
+    
     string str;
 
     str += resp;
@@ -68,9 +66,7 @@ void connection_handler(int socket_desc){
     while(getClient(str) != NULL){
         send(socket_desc, "Nombre ya registrado, utilice otro");
         
-        if(recv(socket_desc, resp, MENSAJE_MAXIMO, 0) < 0)
-            perror("recibiendo mensaje");
-        
+        leer_de_socket(socket_desc, resp);
         str = "";
         str += resp;
     }
@@ -83,6 +79,9 @@ void connection_handler(int socket_desc){
         /* leer socket, salir si hubo error*/
         if(leer_de_socket(oCliente.socket_id, resp) == -1)
             break;
+
+        if(resp[0] == '-')
+            printf("CLAAVE\n");
 
         printf("[%s]: %s\n", oCliente.nickname.data(), resp);
 
@@ -153,6 +152,7 @@ int main(void)
             perror("aceptando la conexión entrante");
             exit(1);
         }
+
         vSockets.push_back(s1);
         threads[i] = thread(connection_handler, s1);
         i++;

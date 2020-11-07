@@ -40,6 +40,11 @@ int main(void){
     /* Conectarse al server (usando INET) */
     int socket_fd = connection_setup();
     
+    /* Recibir el primer mensaje del servidor */
+    char resp[MENSAJE_MAXIMO];
+
+    leer_de_socket(socket_fd, resp);
+    printf("%s\n", resp);
 
     /* Loop principal que envía mensajes al servidor */
     string msg;
