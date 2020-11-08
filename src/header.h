@@ -20,6 +20,7 @@
 #include <stdio.h>
 #include <iostream>
 #include <vector>
+#include <mutex>
 #define MAX_CLIENTS 10
 #define BUF_SIZE 4096
 #define SOCK_PATH "mi_socket"

@@ -1,11 +1,16 @@
 #include "header.h"
 using namespace std;
 
+
+std::vector<int> vSockets;
+std::vector<Client*> onlineClients;
+std::mutex clientsListMutex;
+
 /* Dado un socket, un nickname y el estado de login, registra un nuevo cliente con el nickname dado si el 
    mismo no se encuentra en uso. 
    En caso contrario, envia un mensaje indicando la falla. Además, actualiza 
    la variable log con el nuevo estado de login del cliente. */
-Client addClient(int s, const string& nickname){
+Client createClient(int s, const string& nickname){
 
     Client newClient;
 
@@ -13,6 +18,15 @@ Client addClient(int s, const string& nickname){
     newClient.nickname = nickname;
 
     return newClient;
+}
+
+void addClient(Client& c){
+    
+    clientsListMutex.lock();
+    onlineClients.push_back(&c);
+    clientsListMutex.unlock();
+
+    return;
 }
 
 
@@ -26,8 +40,17 @@ void deleteClient(Client& c){
 /* Dado un nick, devuelve un puntero al cliente encontrado con dicho nickname. En caso de no existir,
    el puntero es NULL */
 Client* getClient(const string& nick) {
+    clientsListMutex.lock();
+    for(int i = 0; i < onlineClients.size(); i++){
+        if(onlineClients[i]->nickname == nick){
+            clientsListMutex.unlock();
+            return onlineClients[i];
+        }
+    }
+    clientsListMutex.unlock();
     return NULL;
 }
+
 
 /* Dado un cliente y un mensaje, envía dicho mensaje a traves del socket asociado al cliente */
 void send(Client* c, const string& msg) {
@@ -49,6 +72,17 @@ void send(int socket_id, const string& msg) {
 
 }
 
+/* Difunde un mensaje */
+void broadcast(const string& msg){
+    clientsListMutex.lock();
+    for(int i = 0; i < onlineClients.size(); i++){
+        send(onlineClients[i], msg);
+    }
+    clientsListMutex.unlock();
+
+    return;
+}
+
 
 /* Funcion que ejecutan los threads */
 void connection_handler(int socket_desc){
@@ -58,9 +92,8 @@ void connection_handler(int socket_desc){
     char resp[MENSAJE_MAXIMO];
 
     leer_de_socket(socket_desc, resp);
-    
-    string str;
 
+    string str;
     str += resp;
 
     while(getClient(str) != NULL){
@@ -71,7 +104,8 @@ void connection_handler(int socket_desc){
         str += resp;
     }
     
-    Client oCliente = addClient(socket_desc, str);
+    Client oCliente = createClient(socket_desc, str);
+    addClient(oCliente);
 
     /* Main loop */
     while(1) {
@@ -137,8 +171,6 @@ int main(void)
     // Abrimos un socket para escuchar conexiones entrantes
     int s = connection_setup();
   
-    std::vector<int> vSockets;
-
     int i = 0;
     int s1;
     thread threads[MAX_CLIENTS];

@@ -31,6 +31,15 @@ int connection_setup(){
     return socket_fd;
 }
 
+void receive(int s){
+    char resp[MENSAJE_MAXIMO];
+    while(1){
+        if(leer_de_socket(s,resp) == -1)
+            break;
+        printf("%s\n", resp);
+    }
+}
+
 
 // Funcion principal de un cliente.
 // El siguiente esquema puede servir como guia. Aprovechen las funciones de string!
@@ -45,6 +54,8 @@ int main(void){
 
     leer_de_socket(socket_fd, resp);
     printf("%s\n", resp);
+
+    thread receptor(receive, socket_fd);
 
     /* Loop principal que envía mensajes al servidor */
     string msg;
