@@ -99,7 +99,7 @@ void changeNick(Client& c, const string& str){
     return;
 }
 
-void list(Client& c){
+void list(Client c){
 
     string formatedMsg = "Usuarios conectados:\n";
 
@@ -113,29 +113,7 @@ void list(Client& c){
     return;
 }
 
-void parse(const string& msg, Client c){
 
-    std::vector<string> splitedMsg = split(msg, " ");
-    
-    if(splitedMsg[0] == "/list"){
-        list(c);
-        return;
-    }
-    printf("%d\n", splitedMsg.size() );
-    if((splitedMsg[0] == "/changenick") && (splitedMsg.size() > 1)){
-        printf("1 %s 2 %s\n", splitedMsg[1].data(), splitedMsg[2].data() );
-        string newNick;
-        for(int i = 1; i < splitedMsg.size(); i++){
-            newNick += splitedMsg[i] + " ";
-        }
-        newNick = newNick.substr(0, newNick.size()-1);
-        changeNick(c, newNick);
-        return;
-    }
-
-    send(&c, "Comando no reconocido o malos parámetros");
-    return;
-}
 
 /* Difunde un mensaje */
 void broadcast(const string& msg, Client oCliente){
@@ -148,6 +126,22 @@ void broadcast(const string& msg, Client oCliente){
     return;
 }
 
+void parse(const string& msg, Client& c){
+
+    std::vector<string> splitedMsg = split(msg, " ");
+    
+    if(splitedMsg[0] == "/list"){
+        list(c);
+        return;
+    }
+    if(splitedMsg[0] == "/spam"){
+        for(int x = 0; x < 10; x++) broadcast("@paciook siganme en instagram gracias", c);
+        return;
+    }
+
+    send(&c, "Comando no reconocido o malos parámetros");
+    return;
+}
 
 /* Funcion que ejecutan los threads */
 void connection_handler(int socket_desc){
