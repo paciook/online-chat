@@ -33,9 +33,9 @@ vector<string> split(const string& str, const string& delim);
 
 struct Client {
 
-    /* COMPLETAR */
-    int id;
     string nickname;
     int socket_id;
+
+    Client(string n, int s) : nickname(n), socket_id(s) {}
 };
 

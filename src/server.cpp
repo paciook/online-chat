@@ -10,20 +10,13 @@ vector<Client*> onlineClients;
 /* Creo los mutex necesarios */
 mutex socketListMutex;
 mutex clientsListMutex;
+mutex createUserMutex;
 
 /* Dado un socket, un nickname y el estado de login, registra un nuevo cliente con el nickname dado si el 
    mismo no se encuentra en uso. 
    En caso contrario, envia un mensaje indicando la falla. Además, actualiza 
    la variable log con el nuevo estado de login del cliente. */
-Client createClient(int s, const string& nickname){
 
-    Client newClient;
-
-    newClient.socket_id = s;
-    newClient.nickname = nickname;
-
-    return newClient;
-}
 
 void addClient(Client& c){
     
@@ -37,17 +30,23 @@ void addClient(Client& c){
 
 /* Dado un cliente, lo elimina del sistema y cierra su socket adecuadamanete(ver shutdown()) */
 void deleteClient(Client& c){
+
     shutdown(c.socket_id, 2);
+    
     socketListMutex.lock();
-    for(int i = 0; i < vSockets.size(); i++)
-        if(vSockets[i] == c.socket_id)
-            vSockets.erase(vSockets.begin() + i);
+    
+        for(int i = 0; i < vSockets.size(); i++)
+            if(vSockets[i] == c.socket_id)
+                vSockets.erase(vSockets.begin() + i);
+    
     socketListMutex.unlock();
     
     clientsListMutex.lock();
-    for(int i = 0; i < onlineClients.size(); i++)
-        if(onlineClients[i]->nickname == c.nickname)
-            onlineClients.erase(onlineClients.begin() + i);
+        
+        for(int i = 0; i < onlineClients.size(); i++)
+            if(onlineClients[i]->nickname == c.nickname)
+                onlineClients.erase(onlineClients.begin() + i);
+    
     clientsListMutex.unlock();
     
 
@@ -57,9 +56,14 @@ void deleteClient(Client& c){
 /* Dado un nick, devuelve un puntero al cliente encontrado con dicho nickname. En caso de no existir,
    el puntero es NULL */
 Client* getClient(const string& nick) {
+    string newNick = nick;
+    for (auto & c: newNick) c = toupper(c);
     clientsListMutex.lock();
         for(int i = 0; i < onlineClients.size(); i++){
-            if(onlineClients[i]->nickname == nick){
+            string usedNick = onlineClients[i]->nickname;
+            for (auto & c: usedNick) c = toupper(c);
+
+            if(usedNick == newNick){
                 clientsListMutex.unlock();
                 return onlineClients[i];
             }
@@ -68,6 +72,16 @@ Client* getClient(const string& nick) {
     return NULL;
 }
 
+bool createUser(Client& c){
+    createUserMutex.lock();
+        if(getClient(c.nickname) != NULL){
+            createUserMutex.unlock();
+            return false;
+        }
+        addClient(c);
+    createUserMutex.unlock();
+    return true;
+}
 
 /* Dado un cliente y un mensaje, envía dicho mensaje a traves del socket asociado al cliente */
 void send(Client* c, const string& msg) {
@@ -87,16 +101,6 @@ void send(int socket_id, const string& msg) {
 
     return;
 
-}
-
-void changeNick(Client& c, const string& str){
-    clientsListMutex.lock();
-    if(getClient(str) != NULL)
-        send(&c, "Nombre ya registrado");
-    else
-        c.nickname=str;
-    clientsListMutex.unlock();
-    return;
 }
 
 void list(Client c){
@@ -135,7 +139,7 @@ void parse(const string& msg, Client& c){
         return;
     }
     if(splitedMsg[0] == "/spam"){
-        for(int x = 0; x < 10; x++) broadcast("@paciook siganme en instagram gracias", c);
+        for(int x = 0; x < 10; x++) broadcast("@paciook siganme en instagram gracias\n", c);
         return;
     }
 
@@ -143,48 +147,53 @@ void parse(const string& msg, Client& c){
     return;
 }
 
-/* Funcion que ejecutan los threads */
-void connection_handler(int socket_desc){
-
-    send(socket_desc, "Ingrese nombre de usuario");
+Client login(int s){
+    
+    send(s, "Ingrese nombre de usuario");
 
     char resp[MENSAJE_MAXIMO];
 
-    leer_de_socket(socket_desc, resp);
+    leer_de_socket(s, resp);
 
     string str;
     str += resp;
 
-    while(getClient(str) != NULL){
-        send(socket_desc, "Nombre ya registrado, utilice otro");
+    Client c(resp, s);
+
+    while(!createUser(c)){
+        send(s, "Nombre ya registrado, utilice otro");
         
-        leer_de_socket(socket_desc, resp);
+        leer_de_socket(s, resp);
         str = "";
         str += resp;
+
+        c = Client(resp, s);
     }
-    
-    Client oCliente = createClient(socket_desc, str);
-    addClient(oCliente);
+    send(s, "REGISTRADO PERRI");
+
+    return c;
+}
+
+/* Funcion que ejecutan los threads */
+void connection_handler(int socket_desc){
+
+    Client oCliente = login(socket_desc);
 
     /* Main loop */
+    char resp[MENSAJE_MAXIMO];
     while(1) {
 
         /* leer socket, salir si hubo error*/
         if(leer_de_socket(oCliente.socket_id, resp) == -1)
             break;
 
-        str = "";
+        string str = "";
         str += resp;
 
         printf("[%s]: %s\n", oCliente.nickname.data(), resp);
 
-        
-
         /* Parsear el buffer recibido*/
 
-        /* Detectar el tipo de mensaje (crudo(solo texto) o comando interno(/..),
-           y ejecutar la funcion correspondiente segun el caso */
-        printf("%c\n", resp[0]);
         if(resp[0] == '/')
             parse(str, oCliente);
         else

@@ -36,7 +36,7 @@ void receive(int s){
     while(1){
         if(leer_de_socket(s,resp) == -1)
             break;
-        printf("%s\n >", resp);
+        printf("\n%s\n", resp);
     }
 }
 
