@@ -2,9 +2,14 @@
 using namespace std;
 
 
-std::vector<int> vSockets;
-std::vector<Client*> onlineClients;
-std::mutex clientsListMutex;
+/* Creo los vectores necesarios */
+vector<int> vSockets;
+vector<thread> threadPool;
+vector<Client*> onlineClients;
+
+/* Creo los mutex necesarios */
+mutex socketListMutex;
+mutex clientsListMutex;
 
 /* Dado un socket, un nickname y el estado de login, registra un nuevo cliente con el nickname dado si el 
    mismo no se encuentra en uso. 
@@ -23,7 +28,7 @@ Client createClient(int s, const string& nickname){
 void addClient(Client& c){
     
     clientsListMutex.lock();
-    onlineClients.push_back(&c);
+        onlineClients.push_back(&c);
     clientsListMutex.unlock();
 
     return;
@@ -32,8 +37,20 @@ void addClient(Client& c){
 
 /* Dado un cliente, lo elimina del sistema y cierra su socket adecuadamanete(ver shutdown()) */
 void deleteClient(Client& c){
+    shutdown(c.socket_id, 2);
+    socketListMutex.lock();
+    for(int i = 0; i < vSockets.size(); i++)
+        if(vSockets[i] == c.socket_id)
+            vSockets.erase(vSockets.begin() + i);
+    socketListMutex.unlock();
+    
+    clientsListMutex.lock();
+    for(int i = 0; i < onlineClients.size(); i++)
+        if(onlineClients[i]->nickname == c.nickname)
+            onlineClients.erase(onlineClients.begin() + i);
+    clientsListMutex.unlock();
+    
 
-   /* COMPLETAR */
     return;
 }
 
@@ -41,12 +58,12 @@ void deleteClient(Client& c){
    el puntero es NULL */
 Client* getClient(const string& nick) {
     clientsListMutex.lock();
-    for(int i = 0; i < onlineClients.size(); i++){
-        if(onlineClients[i]->nickname == nick){
-            clientsListMutex.unlock();
-            return onlineClients[i];
+        for(int i = 0; i < onlineClients.size(); i++){
+            if(onlineClients[i]->nickname == nick){
+                clientsListMutex.unlock();
+                return onlineClients[i];
+            }
         }
-    }
     clientsListMutex.unlock();
     return NULL;
 }
@@ -72,14 +89,62 @@ void send(int socket_id, const string& msg) {
 
 }
 
-/* Difunde un mensaje */
-void broadcast(const string& msg){
+void changeNick(Client& c, const string& str){
+    clientsListMutex.lock();
+    if(getClient(str) != NULL)
+        send(&c, "Nombre ya registrado");
+    else
+        c.nickname=str;
+    clientsListMutex.unlock();
+    return;
+}
+
+void list(Client& c){
+
+    string formatedMsg = "Usuarios conectados:\n";
+
     clientsListMutex.lock();
     for(int i = 0; i < onlineClients.size(); i++){
-        send(onlineClients[i], msg);
+        formatedMsg += onlineClients[i]->nickname + "\n";
     }
     clientsListMutex.unlock();
 
+    send(&c, formatedMsg);
+    return;
+}
+
+void parse(const string& msg, Client c){
+
+    std::vector<string> splitedMsg = split(msg, " ");
+    
+    if(splitedMsg[0] == "/list"){
+        list(c);
+        return;
+    }
+    printf("%d\n", splitedMsg.size() );
+    if((splitedMsg[0] == "/changenick") && (splitedMsg.size() > 1)){
+        printf("1 %s 2 %s\n", splitedMsg[1].data(), splitedMsg[2].data() );
+        string newNick;
+        for(int i = 1; i < splitedMsg.size(); i++){
+            newNick += splitedMsg[i] + " ";
+        }
+        newNick = newNick.substr(0, newNick.size()-1);
+        changeNick(c, newNick);
+        return;
+    }
+
+    send(&c, "Comando no reconocido o malos parámetros");
+    return;
+}
+
+/* Difunde un mensaje */
+void broadcast(const string& msg, Client oCliente){
+    string formatedMsg = "[" + oCliente.nickname + "]: " + msg;
+    clientsListMutex.lock();
+        for(int i = 0; i < onlineClients.size(); i++)
+            if(onlineClients[i]->nickname != oCliente.nickname)
+                send(onlineClients[i], formatedMsg);
+    clientsListMutex.unlock();
     return;
 }
 
@@ -114,20 +179,26 @@ void connection_handler(int socket_desc){
         if(leer_de_socket(oCliente.socket_id, resp) == -1)
             break;
 
-        if(resp[0] == '-')
-            printf("CLAAVE\n");
+        str = "";
+        str += resp;
 
         printf("[%s]: %s\n", oCliente.nickname.data(), resp);
 
+        
+
         /* Parsear el buffer recibido*/
-        /* COMPLETAR */
 
         /* Detectar el tipo de mensaje (crudo(solo texto) o comando interno(/..),
            y ejecutar la funcion correspondiente segun el caso */
-        /* COMPLETAR */
+        printf("%c\n", resp[0]);
+        if(resp[0] == '/')
+            parse(str, oCliente);
+        else
+            broadcast(str, oCliente);
 
     }
-   
+
+    deleteClient(oCliente);
     return;  
 }
 
@@ -171,9 +242,7 @@ int main(void)
     // Abrimos un socket para escuchar conexiones entrantes
     int s = connection_setup();
   
-    int i = 0;
     int s1;
-    thread threads[MAX_CLIENTS];
 
     while(1) {  
 
@@ -184,16 +253,18 @@ int main(void)
             perror("aceptando la conexión entrante");
             exit(1);
         }
+  
+        socketListMutex.lock();
+            vSockets.push_back(s1);
+        socketListMutex.unlock();
 
-        vSockets.push_back(s1);
-        threads[i] = thread(connection_handler, s1);
-        i++;
+        threadPool.push_back(thread(connection_handler, s1));
 
     }
 
     /* Cerramos las conexiones pendientes. */
     while(vSockets.size() != 0){
-        close(vSockets[vSockets.size() - 1]);
+        shutdown(vSockets[vSockets.size() - 1], 2);
         vSockets.pop_back();
     }
   

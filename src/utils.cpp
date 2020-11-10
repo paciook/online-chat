@@ -14,7 +14,7 @@ int leer_de_socket(int socket_id, char buf[]) {
     	perror("recibiendo");
     	return 0;
     }
-    buf[n] = '\0'; /* Agregar caracter de fin de cadena a lo recibido. */
+    buf[n] = '\0';  /* Agregar caracter de fin de cadena a lo recibido. */
     return 0;
 }
 
@@ -26,18 +26,15 @@ int leer_de_socket(int socket_id, char buf[]) {
 
 vector<string> split(const string& str, const string& delim)
 {
-    auto start = 0U;
-    auto end = str.find(delim);
-    vector<string> vecResp;
-    int aux = 0;
-
-    while (end != std::string::npos)
-    {
-        vecResp[aux] = str.substr(start, end - start);
-        start = end + delim.length();
-        end = str.find(delim, start);
-    }
-
-    return vecResp;
+    vector<string> v;
+    string aux = str;
+    size_t pos = -1;
+    string token;
+    do{
+        token = aux.substr(0, pos);
+        v.push_back(token);
+        aux.erase(0, pos + delim.length());
+    }while ((pos = aux.find(delim)) != std::string::npos);
+    return v;
 }
 
