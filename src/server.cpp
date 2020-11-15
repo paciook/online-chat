@@ -267,8 +267,10 @@ int main(void)
 
     /* Cerramos las conexiones pendientes. */
     while(vSockets.size() != 0){
-        shutdown(vSockets[vSockets.size() - 1], 2);
-        vSockets.pop_back();
+        socketListMutex.lock();
+            shutdown(vSockets[vSockets.size() - 1], 2);
+            vSockets.pop_back();
+        socketListMutex.unlock();
     }
   
     /* Cerramos la conexión que escucha. */
